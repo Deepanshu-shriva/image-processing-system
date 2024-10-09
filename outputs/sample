@@ -1,0 +1,299 @@
+// // src/controllers/productController.js
+// const Product = require("../src/models/Product");
+// const { processImages } = require("../src/services/imageProcessingService");
+// const { validateCSV } = require("../utils/csvValidator");
+// const { generateOutputCSV } = require("../src/services/csvGenerator");
+// const { generateProductCSV } = require("../src/services/csvGenerateProduct");
+// const multer = require("multer");
+// const { v4: uuidv4 } = require("uuid");
+// const path = require("path");
+
+// const upload = multer({ dest: "uploads/" });
+
+// async function uploadCSV(req, res) {
+//     const requestId = uuidv4();
+//     console.log("Received request with body:", req.body); // Log body
+//     console.log("Received file:", req.file); // Log file data
+  
+//     try {
+//       if (!req.file) {
+//         throw new Error("No file uploaded");
+//       }
+  
+//       // Validate the CSV file
+//       const validatedData = await validateCSV(req.file.path);
+//       console.log("Validated data:", validatedData);
+      
+//       // Create Product instances from validated data
+//       const products = validatedData.map(
+//         (data) =>
+//           new Product({
+//             serial_number: data["S. No."],
+//             product_name: data["Product Name"],
+//             input_image_urls: data["Input Image Urls"]
+//               .split(",")
+//               .map((url) => url.trim()),
+//             request_id: requestId,
+//           })
+//       );
+  
+//       // Insert products into the database
+//       await Product.insertMany(products);
+  
+//       // Process images asynchronously
+//       await Promise.all(products.map(processImages));
+  
+//       const outputCSVPath = await generateOutputCSV(products, requestId);
+  
+//       // Respond with the unique request ID
+//       res.status(202).json({ request_id: requestId });
+//     } catch (error) {
+//       console.error("Error in uploadCSV:", error); // Log error
+//       res.status(500).json({ error: error.message });
+//     }
+//   }
+  
+// async function checkStatus(req, res) {
+//   const { request_id } = req.params;
+//   const products = await Product.find({ request_id });
+//   if (products.length === 0) {
+//     return res.status(404).json({ error: "Request ID not found" });
+//   }
+//   res.json(products);
+// }
+
+// async function generateCSV(req, res) {
+//   try {
+//     generateProductCSV(); // Call the function to generate CSV
+//     res.status(200).json({ message: "Product CSV generated successfully." });
+//   } catch (error) {
+//     console.error("Error generating product CSV:", error);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// }
+
+// module.exports = { uploadCSV, checkStatus, upload, generateCSV };
+
+
+// // src/models/Product.js
+// const mongoose = require("mongoose");
+
+// const productSchema = new mongoose.Schema({
+//   serial_number: { type: Number, required: true },
+//   product_name: { type: String, required: true },
+//   input_image_urls: [String], // Array of input image URLs
+//   output_image_urls: [String], // Array of output image URLs
+//   request_id: { type: String, required: true },
+//   status: {
+//     type: String,
+//     enum: ["pending", "completed", "failed"], // Added 'failed' as a third status
+//     default: "pending",
+//   },
+//   created_at: { type: Date, default: Date.now },
+//   updated_at: { type: Date, default: Date.now },
+// });
+
+// module.exports = mongoose.model("Product", productSchema);
+// //
+// // src/routes/api.js
+// const express = require("express");
+// const multer = require("multer");
+// const {
+//   processCSV,
+//   validateCSV,
+// } = require("../src/services/imageProcessingService");
+// const router = express.Router();
+// const upload = multer({
+//   dest: "uploads/",
+//   limits: { fileSize: 10 * 1024 * 1024 },
+// }); // Directory for uploaded files
+
+// // Upload API
+// router.post("/upload", upload.single("file"), async (req, res) => {
+//   try {
+//     const isValid = await validateCSV(req.file.path);
+//     if (!isValid) {
+//       return res.status(400).json({ message: "Invalid CSV format" });
+//     }
+
+//     const requestId = await processCSV(req.file.path);
+//     res.status(201).json({ requestId });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .json({ message: "Error processing the file", error: error.message });
+//   }
+// });
+
+// const Product = require("../src/models/Product");
+
+// // Status API
+// router.get("/status/:requestId", async (req, res) => {
+//   const { requestId } = req.params;
+
+//   try {
+//     const product = await Product.findOne({ request_id: requestId });
+//     if (!product) {
+//       return res.status(404).json({ message: "Request ID not found" });
+//     }
+//     res.status(200).json({ requestId, status: product.status });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .json({ message: "Error fetching the status", error: error.message });
+//   }
+// });
+
+// module.exports = router;
+// // src/services/csvGenerateProduct.js
+// const fs = require("fs");
+
+// const products = [
+//   {
+//     serialNumber: 1,
+//     productName: "SKU1",
+//     inputImageUrls: [
+//       "https://www.public-image-url1.jpg",
+//       "https://www.public-image-url2.jpg",
+//       "https://www.public-image-url3.jpg",
+//     ],
+//   },
+//   {
+//     serialNumber: 2,
+//     productName: "SKU2",
+//     inputImageUrls: [
+//       "https://www.public-image-url1.jpg",
+//       "https://www.public-image-url2.jpg",
+//       "https://www.public-image-url3.jpg",
+//     ],
+//   },
+// ];
+
+// // Generate CSV content
+// let csvContent = "S. No.,Product Name,Input Image Urls\n";
+// products.forEach((product) => {
+//   const urls = product.inputImageUrls.join(","); // Join URLs with commas
+//   csvContent += `${product.serialNumber},${product.productName},${urls}\n`;
+// });
+
+// // Write to CSV file
+// fs.writeFileSync("products.csv", csvContent);
+// console.log("CSV file has been generated: products.csv");
+// // src/services/csvGenerator.js
+// const { Parser } = require('json2csv');
+// const fs = require('fs').promises;
+// const path = require('path');
+// const Product = require('../src/models/Product'); 
+
+// async function generateOutputCSV(requestId) {
+//     const products = await Product.find({ request_id: requestId });
+//     if (!products || products.length === 0) {
+//         throw new Error("No products found for this request ID");
+//       }
+//     const outputData = products.map(product => ({
+//         'S. No.': product.serial_number,
+//         'Product Name': product.product_name,
+//         'Input Image Urls': product.input_image_urls.join(', '),
+//         'Output Image Urls': product.output_image_urls.join(', ')
+//     }));
+
+//     const json2csvParser = new Parser();
+//     const csv = json2csvParser.parse(outputData);
+    
+//     // Save the CSV file
+//     const outputFilePath = path.join('outputs', `output_${requestId}.csv`);
+//     await fs.writeFile(outputFilePath, csv);
+    
+//     return outputFilePath;
+// }
+
+// module.exports = { generateOutputCSV };
+
+// // src/services/imageProcessingService.js
+// const sharp = require('sharp');
+// const axios = require('axios');
+// const fs = require('fs').promises;
+
+// async function processImages(product) {
+//     const outputUrls = [];
+
+//     for (const url of product.input_image_urls) {
+//         // Fetch the image from the URL
+//         const response = await axios.get(url, { responseType: 'arraybuffer' });
+
+//         // Compress the image to 50% quality
+//         const compressedImageBuffer = await sharp(response.data).jpeg({ quality: 50 }).toBuffer();
+        
+//         // Define output file name
+//         const outputFileName = `outputs/output_${product.serial_number}.jpg`;
+        
+//         // Save the compressed image to the filesystem
+//         await fs.writeFile(outputFileName, compressedImageBuffer);
+        
+//         // Store the output URL
+//         outputUrls.push(outputFileName);
+//     }
+
+//     // Update product with output image URLs and status
+//     product.output_image_urls = outputUrls;
+//     product.status = 'completed';
+//     await product.save();
+// }
+
+// module.exports = { processImages };
+// // src/app.js
+// const express = require("express");
+// const mongoose = require("mongoose");
+// const apiRoutes = require("./routes/api");
+// const logger = require("./utils/logger");
+// require("dotenv").config();
+// const app = express();
+
+// // Middleware
+// app.use(express.json()); // Parse JSON bodies
+// app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+// app.use(logger); // Optional: Use your logger middleware
+
+// // Routes
+// app.use("/api", apiRoutes);
+
+// // Connect to MongoDB
+// mongoose
+//   .connect(process.env.MONGODB_URI, {})
+
+//   .then(() => {
+//     console.log("MongoDB connected successfully");
+//   })
+//   .catch((err) => {
+//     console.error("MongoDB connection error:", err);
+//   });
+
+// // Error handling middleware
+// app.use((err, req, res, next) => {
+//   console.error(err.stack);
+//   res.status(500).send("Something broke!");
+// });
+// // Export the app for testing or other usage
+// module.exports = app;
+// // src/index.js
+// require("dotenv").config();
+// const app = require("./app");
+// const PORT = process.env.PORT || 3000;
+
+
+
+// const server = app.listen(PORT, (err) => {
+//   if (err) {
+//     console.error("Failed to start server:", err);
+//     process.exit(1);
+//   }
+//   const ENV = process.env.NODE_ENV || "development";
+//   console.log(`Server is running in ${ENV} mode on http://localhost:${PORT}`);
+// });
+// // Graceful shutdown
+// process.on("SIGINT", () => {
+//   server.close(() => {
+//     console.log("Server closed");
+//     process.exit(0);
+//   });
+// });
